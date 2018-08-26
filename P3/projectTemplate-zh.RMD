@@ -1,0 +1,639 @@
+白葡萄酒质量探索
+========================================================
+# 数据集简介
+本次探索分析，选用了 P.Cortez等人创建的白葡萄酒数据集，该数据集包含了4898种白葡萄酒的化学成分含量及评分等信息。
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+# 加载你最终使用的所有组件
+# 在这个代码块的分析中。
+
+# 注意，在这个代码块中，将参数 "echo" 设为假。
+# This prevents the code from displaying in the knitted HTML output.这可以避免代码混入 HTML 输出显示。
+# 应当在文件中，对所有代码块设为 echo=FALSE 。
+
+library(ggplot2)
+library(knitr)
+library(gridExtra)
+#install.packages('psych')
+#install.packages('corrplot')
+#install.packages('PerformanceAnalytics')
+library(psych)
+library(corrplot)
+library(PerformanceAnalytics)
+library(memisc)
+```
+该数据集的维度
+```{r echo=FALSE, Load_the_Data}
+# 加载数据
+wq <- read.csv('wineQualityWhites.csv')
+dim(wq)
+```
+数据集列名及取值
+```{r echo=FALSE, show_the_Data_columns}
+str(wq)
+```
+```{r echo=FALSE, show_the_Data_summary}
+summary(wq)
+```
+通过观察可以看出该数据集共有4898个样本，包含13列，其中各列的详细信息如下：
+
+- x:序号列
+- fixed.acidity：非挥发性酸(单位：g/dm^3)
+- volatile.acidity:挥发性酸(单位：g/dm^3)
+- citric.acid:柠檬酸(单位：g/dm^3)
+- residual.sugar：残糖(单位：g/dm^3)
+- chlorides：氯化物(氯化钠的含量，单位：g/dm^3)
+- free.sulfur.dioxide：游离二氧化硫(单位：mg/dm^3)
+- total.sulfur.dioxide：总二氧化硫(单位：mg/dm^3)
+- density：密度(单位：g/dm^3)
+- pH：ph值
+- sulphates：硫酸盐含量(硫酸钾的含量，单位： g/dm^3)
+- alcohol：酒精含量(% by volume)
+- quality：葡萄酒质量评分，从0（极差）-10（非常好）
+
+```{r echo=FALSE,delete_x}
+#删除x列，序号列对研究没有意义
+wq <- subset(wq,select= -c(X))
+```
+
+# 单变量绘图选择
+```{r echo=FALSE, histogram_of_quality}
+qplot(x=quality,data = wq,binwidth=0.5)+
+  ggtitle('Quality')
+```
+```{r echo=FALSE, table_of_quality}
+table(wq$quality)
+```
+
+通过观察质量评分直方图，对于白葡萄酒的评分都是整数，最高的评分是9，最低的评分是3。发现超过2000种的白葡萄酒的评分都是6，评分为5的白葡萄酒大概接近1500种，这些种类的葡萄酒数量最少；该数据集中约有3/4的白葡萄酒评分在6分及6分以下。
+
+```{r echo=FALSE, warning=FALSE,message=FALSE, histogram_of_fixed.acidity}
+qplot(x=fixed.acidity,data = wq)+
+  scale_x_continuous(breaks=seq(0,15,3))+
+  ggtitle('Fixed.acidity')
+```
+```{r echo=FALSE,summary_of_fixed.acidity}
+summary(wq$fixed.acidity)
+```
+
+在该数据集中，非挥发性酸(fixed.acidity)的含量最小值是3.8，最大值是14.2，中位数是6.8，均值是6.855，分布近似于正态分布。大部分的葡萄酒的非挥发性酸的含量在6.8左右。
+
+```{r echo=FALSE, warning=FALSE,message=FALSE, histogram_of_Volatile.acidity}
+qplot(x=volatile.acidity,data = wq) +
+  scale_x_continuous(breaks = seq(0,1.2,0.2))+
+  ggtitle('Volatile.acidity')
+```
+    
+通过观察上图，分布是右偏的，该数据集中大部分的白葡萄酒的挥发性酸(volatile.acidity)的含量在0.1-0.4之间，挥发性酸的统计信息如下表所示,可以很明显的观察到非挥发性酸IQR为0.11，这表明数据的分布相对密集，Q3到最大值之间的差值约为0.79，是四分位差的7倍多，形成了右侧的长尾。为什么挥发性酸和非挥发性酸的含量分布有这种差异？
+    
+```{r echo=FALSE,summary_of_volatile.acidity}
+summary(wq$volatile.acidity)
+```
+
+```{r echo=FALSE, warning=FALSE,message=FALSE, histogram_of_citric.acid}
+qplot(x=citric.acid,data = wq) +
+  scale_x_continuous(breaks = seq(0,1.7,0.2))+
+  ggtitle('Citric.acid')
+```
+```{r echo=FALSE,warning=FALSE,summary_of_citric.acid}
+summary(wq$citric.acid)
+```
+```{r echo=FALSE,warning=FALSE, histogram_of_citric.acid_binwidth0.01}
+#设置binwidth为0.01
+qplot(x=citric.acid,data = wq,binwidth=0.01) +
+  scale_x_continuous(breaks = seq(0,1.7,0.2))+
+  ggtitle('Citric.acid(binwidth=0.01)')
+```
+
+通过观察上面两幅图，发现柠檬酸的含量也接近正态分布，中值是0.32，均值是0.3342.和其他两种酸不同的是，柠檬酸的含量有0值，当将binwidth设为0.01时，发现在0.5处有一个峰值，超过200种的葡萄酒的柠檬酸含量在0.5左右，这里我统计了一个柠檬酸在（0.48-0.52）之间的子集，后续可以继续分析这类葡萄酒的质量评分。
+
+```{r echo=FALSE,citric.acid =0}
+subset(wq,wq$citric.acid ==0)
+```
+
+```{r echo=FALSE, warning=FALSE,message=FALSE, histogram_of_residual.sugar}
+qplot(x=residual.sugar,data = wq) +
+  scale_x_continuous(breaks = seq(0,65,5))+
+  ggtitle('Residual.sugar')
+```
+```{r echo=FALSE,summary_of_residual.sugar}
+summary(wq$residual.sugar)
+```
+
+```{r echo=FALSE, warning=FALSE,message=FALSE, histogram_of_log10_residual.sugar}
+qplot(x=log10(residual.sugar),data = wq) +
+  scale_x_continuous(breaks =seq(-0.2,2,0.2)) +
+  ggtitle('Residual.sugar(log10)')+
+  labs(x="log(residual.sugar)")
+#table(summary(log10(wq$residual.sugar)))
+```
+
+通过计算和观察可以发现，葡萄酒中残糖含量的变化范围较广，最小值仅为0.6，最大值为65.8，由于在原直方图中观察到的结果不明显，所以在这里对x轴进行了对数变换，发现残糖含量程双峰分布，第一个峰值在0.2，第二个峰值出现在0.9.为什么会出现这种现象？
+
+```{r echo=FALSE, warning=FALSE,message=FALSE, histogram_of_chlorides}
+qplot(x=chlorides,data = wq) +
+  scale_x_continuous(breaks = seq(0,0.4,0.05))+
+  ggtitle('Chlorides')
+```
+```{r echo=FALSE,summary_of_chlorides}
+summary(wq$chlorides)
+```
+```{r echo=FALSE, warning=FALSE,message=FALSE, histogram_of_chlorides_less_than_0.1}
+qplot(x=chlorides,data = subset(wq,chlorides<0.1)) +
+  scale_x_continuous(breaks = seq(0,0.1,0.02))+
+  ggtitle('Chlorides less than 0.1 ')
+```
+
+由上面第一幅图可以观察到葡萄酒中氯化物的含量右偏分布，大部分的氯化物含量在0.1以下，所以，这里我抛弃了氯化物含量多于0.1的普通酒，重新绘制氯化物直方图，发现其接近于正态分布。氯化物含量的均值为0.046，中值为0.043。大部分的葡萄酒氯化物含量都在0.05以下。
+
+```{r echo=FALSE, warning=FALSE,message=FALSE, histogram_of_free.sulfur.dioxide}
+qplot(x=free.sulfur.dioxide,data = wq)+
+  scale_x_continuous(breaks = seq(0,150,20))+
+  ggtitle('Free.sulfur.dioxide')
+```
+```{r echo=FALSE,summary_of_free.sulfur.dioxide}
+summary(wq$free.sulfur.dioxide)
+```
+```{r echo=FALSE, warning=FALSE,message=FALSE, histogram_of_free.sulfur.dioxide_less_than100}
+qplot(x=free.sulfur.dioxide,data = wq,xlim = c(0,100))+
+  ggtitle('Free.sulfur.dioxide(xlim0-100)')
+```
+
+通过统计信息和上图发现，白葡萄酒中游离二氧化硫的含量范围变化也较大在2-289之间，均值是35.31，中值是34.0,但是大部分的游离二氧化硫的含量集中在0-100之间，所以这里将x轴限制在100以内观察，发现游离二氧化硫的含量大部分集中在25-50之间。
+
+```{r echo=FALSE, histogram_of_total.sulfur.dioxide}
+qplot(x=total.sulfur.dioxide,data = wq,binwidth=5)+
+  scale_x_continuous(breaks = seq(0,400,20))+
+  ggtitle('Total.sulfur.dioxide')
+```
+```{r echo=FALSE,summary_of_total.sulfur.dioxide}
+summary(wq$total.sulfur.dioxide)
+```
+
+通过上图和统计信息，总二氧化硫的含量分布是正态分布的，葡萄酒中总二氧化硫的含量范围在9.0-440.0之间，均值是138.4，中值是134.0。这里可以思考一下，总二氧化硫含量和游离二氧化硫含量之间的关系，直觉上总二氧化硫应该是包含了游离二氧化硫的。
+
+```{r echo=FALSE, warning=FALSE,message=FALSE, histogram_of_density}
+qplot(x=density,data = wq)+
+  scale_x_continuous(breaks = seq(0.985,1.01,0.005))+
+  ggtitle('Density')
+
+```
+```{r echo=FALSE,summary_of_density}
+summary(wq$density)
+```
+```{r echo=FALSE,warning=FALSE,message=FALSE,histogram_density}
+qplot(x=density,data = subset(wq,density<1.02))+
+  ggtitle('Density')
+```
+
+通过上图和统计计算，葡萄酒密度的变化范围不大，在0.9871-1.0390之间，均值是0.994，中值是0.9937。通过放大x轴，发现密度的分布基本上是正态分布，在0.995处和0.997处有两个峰值，但是这里考虑到样本数量的限制，认为其就是正态分布。
+
+```{r echo=FALSE,warning=FALSE,message=FALSE, histogram_of_ph}
+qplot(x=pH,data = wq)+
+  scale_x_continuous(breaks = seq(0,3.9,0.3))+
+  ggtitle('PH')
+```
+```{r echo=FALSE,summary_of_ph}
+summary(wq$pH)
+```
+
+由上图可以很明显的发现，大多数葡萄酒的pH值的范围在3.0-3.4之间，pH值的平均值是3.188，中位数是3.180，pH值的直方图是正态分布。
+
+```{r echo=FALSE,warning=FALSE,message=FALSE, histogram_of_sulphates}
+qplot(x=sulphates,data = wq)+
+  scale_x_continuous(breaks = seq(0,1,0.05))+
+  ggtitle('Sulphates')
+
+```
+```{r echo=FALSE,summary_of_sulphates}
+summary(wq$sulphates)
+```
+```{r echo=FALSE,warning=FALSE,message=FALSE, histogram_of_log10_sulphates}
+qplot(x=log10(sulphates),data = wq)+
+  scale_x_continuous(breaks = seq(-0.70,0.04,0.2))+
+  ggtitle('Sulphates(log10)')+
+  labs(x="log(sulphates)")
+#table(summary(log10(wq$sulphates)))
+```
+
+通过上图可以发现，葡萄酒中硫酸盐的含量分布是双峰长尾的，所以这里对其进行了对数变换，通过观察和比较两幅图，在-0.35时，明显要凹下去一些，为什么会出现这种情况。葡萄酒中硫酸盐的含量均值为0.4898，中位数是0.47。
+
+```{r echo=FALSE,warning=FALSE,message=FALSE, histogram_of_alcohol}
+qplot(x=alcohol,data = wq)+
+  scale_x_continuous(breaks = seq(8,15,1))+
+  ggtitle('alcohol')
+```
+```{r echo=FALSE, summary_of_alcohol}
+summary(wq$alcohol)
+```
+```{r echo=FALSE, histogram_of_alcohol_bin0.1}
+qplot(x=alcohol,data = wq,binwidth=0.1)+
+  scale_x_continuous(breaks = seq(8,15,1))+
+  ggtitle('alcohol(bin=0.1)')
+```
+```{r echo=FALSE, warning=FALSE,message=FALSE,add_column_alcohol.level}
+#添加一列alcohol.level代表酒精强度
+wq$alcohol.level <- cut(wq$alcohol,c(0,10,12,15),
+                        labels = c('low','median','high'))
+table(wq$alcohol.level)
+```
+```{r echo=FALSE,warning=FALSE,message=FALSE, hisgram_of_different_alcohol_level}
+alq1 <- qplot(x=alcohol,data = subset(wq,wq$alcohol.level =='low'))
+alq2 <- qplot(x=alcohol,data = subset(wq,wq$alcohol.level =='median'))
+alq3 <- qplot(x=alcohol,data = subset(wq,wq$alcohol.level=='high'))
+grid.arrange(alq1,alq2,alq3,ncol = 1)
+```
+```{r echo=FALSE,warning=FALSE, summary_by_alcohol.level}
+by(wq$alcohol,wq$alcohol.level,summary)
+```
+
+从上图也可以明显看出，葡萄酒中的酒精含量相较于其他特性的变化不是很有规律，明显的存在多个峰值,在9.3、11、12.4处的峰值，当我们进一步调小binwidth时，峰值的变化更多。酒精含量的变化范围从8.0-14.2，酒精含量的均值为10.51，酒精含量的中位数为10.40。
+这里进一步对酒精含量进行了划分，将其分为了低(<=10),中等(<=12),高(>12)，这三种进一步对它们的分布进行了观察，发现低酒精含量和高酒精含量的数量差不多相当，高含量的要少一些。相对于其他含量的，中等含量的分布要更均匀一些。
+
+
+# 单变量分析
+
+### 你的数据集结构是什么？
+白葡萄酒数据集中包含了4898种白葡萄酒的信息，共有13列：
+
+- x:序号列
+- fixed.acidity：非挥发性酸(单位：g/dm^3)
+- volatile.acidity:挥发性酸(单位：g/dm^3)
+- citric.acid:柠檬酸(单位：g/dm^3)
+- residual.sugar：残糖(单位：g/dm^3)
+- chlorides：氯化物(氯化钠的含量，单位：g/dm^3)
+- free.sulfur.dioxide：游离二氧化硫(单位：mg/dm^3)
+- total.sulfur.dioxide：总二氧化硫(单位：mg/dm^3)
+- density：密度(单位：g/dm^3)
+- pH：ph值
+- sulphates：硫酸盐含量(硫酸钾的含量，单位： g/dm^3)
+- alcohol：酒精含量(% by volume)
+- quality：葡萄酒质量评分，从0（极差）~10（非常好）
+
+其他发现：
+
+- 这些白葡萄酒样本中，质量评分是整数，最低为3，最高为9
+- 有近75%的白葡萄酒评分在6及6以下
+- 相较于其他特征，柠檬酸的含量包含0值，其他特征不包含0值
+- 白葡萄酒中氯化物的含量大部分在0.1以下，均值为0.04577
+- 化学含量变化范围最大的是总二氧化硫的含量，最小值为9.0，最大值为440.0，均值为138.4
+- 密度变化范围最小，从 0.9871-1.0390
+- pH值的变化从2.72-3.82，平均pH值为3.188
+- 酒精含量的分布最不均匀，有多处峰值
+
+### 你的数据集内感兴趣的主要特性有哪些？
+对该数据集内最感兴趣的特征是质量评分，因为质量评分是一种最直观的判断葡萄酒好坏的标准。
+
+### 你认为数据集内哪些其他特征可以帮助你探索兴趣特点？
+可能残糖含量，各类酸的含量，以及酒精含量相较于其他特征来说可能会更多的影响白葡萄酒的评分，这可能也是个人在没有任何葡萄酒知识的前提下，挑选葡萄酒时通常关注的点。
+
+### 根据数据集内已有变量，你是否创建了任何新变量？  
+- 删除了x列，序号列对探索没有帮助  
+- 创建了酒精水平含量（alcohol.level）变量，因为通过观察酒精含量所呈现的多个峰值的状态，对酒精含量进行不同等级（0-10(low),10-12(median),12-15(high)）的划分，后面可能会来观察不同酒精等级对最终的质量评分的影响。
+
+### 在已经探究的特性中，是否存在任何异常分布？你是否对数据进行一些操作，如清洁、调整或改变数据的形式？如果是，你为什么会这样做？
+存在异常分布:
+
+- 在对柠檬酸进行直方图分析时，发现将bin宽度设置为0.01时，在0.5附近有一个较大的峰值，有超过200种葡萄酒的柠檬酸含量在这一范围。通过调整bin宽度可以观察到更细节的数据信息。
+- 在对残糖分析时，发现其是右偏分布，所以对其x轴进行了对数变换，能够观察到更多长尾的信息。变换后发现残糖含量是双峰分布的，在2和9处达到峰值。
+- 对于氯化物含量、游离二氧化硫的含量、密度这一类数据集中分布在某一段的数据，都采用了子集或设置xlim的方式，放大x轴，来查看更详细的数据信息。
+
+# 双变量绘图选择
+```{r echo=FALSE, cor_matrix}
+#相关系数矩阵
+cor_matr <- cor(subset(wq,select=-c(alcohol.level)))
+cor_matr
+```
+```{r echo=FALSE, scatter_matrix}
+chart.Correlation(wq[,0:12],histogram = T)
+```
+```{r echo=FALSE,relativation_Plots}
+corrplot(cor_matr,type = "upper",tl.col = "black",tl.srt = 45)
+```
+
+这里对所有的特性进行了相关性分析，创建了相关矩阵，及散点图矩阵。通过观察，发现酒精含量（alcohol）相对于其他特性，和质量评分的相关性最高，相关系数约为0.44，其后依次是密度（density）-0.31、氯化物（chlorides）-0.21、挥发性酸（volatile.acidity）-0.19、总二氧化硫含量（total.sulfur.dioxide）-0.17、非挥发性酸（fixed.acidity）-0.11、pH值-0.10、残糖（residual.sugar）-0.10、硫酸盐含量（sulphates）0.05、柠檬酸（citric.acid）-0.009、游离二氧化硫（free.sulfur.dioxide）0.008。相关系数的差异很大，所以这里着重分析几个和质量评分相关较强的特征。
+
+```{r echo=FALSE,warning=FALSE,message=FALSE, point_quality_alcohol}
+ggplot(aes(x=quality,y=alcohol,group=quality),data=wq)+
+  geom_point(alpha=0.3)+
+  geom_jitter(alpha=0.3)+
+  geom_boxplot()
+```
+
+```{r echo=FALSE,statistics_by_quality_alcohol}
+by(wq$alcohol,wq$quality,summary)
+```
+
+结合散点图和线箱图，通过设置透明度，发现大部分的评分在5-7之间，可以较明确的看出质量评分在5-9之间时,评分越高，酒精含量的中位数就越高，在评分3-5之间，评分越高，酒精含量的中位数就越低。
+
+```{r echo=FALSE, warning=FALSE,message=FALSE,point_quality_density}
+ggplot(aes(x=quality,y=density,group=quality),data = wq)+
+  geom_point(alpha=0.5)+
+  geom_jitter(alpha=0.3)+
+  geom_boxplot()+
+  scale_y_continuous(limits = c(0.985,1.01))
+```
+```{r echo=FALSE,statistics_by_quality_density}
+by(wq$density,wq$quality,summary)
+```
+
+通过观察密度和质量评分散点图及线箱图，发现随着密度的增加，质量评分逐渐降低，这也确实符合前面计算出来的相关系数。但是要注意的是和酒精含量类似，在评分为3-5这段区间，质量评分随着密度的增加，评分也有一个小的增幅。考虑到酒精含量和密度这两者的强相关性，可以分析一下这二者的联系。
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,point_density_alchol}
+ggplot(aes(x=alcohol,y=density),data = wq)+
+  geom_point(alpha = 0.05)+
+  ylim(c(0.985,1.01))+
+  geom_smooth()
+```
+
+酒精含量和密度的相关系数约为-0.78，二者有很强的相关性，通过观察上图，可以了解到二者几乎是线性关系。我们知道，酒精的密度比水要小，所以葡萄酒中的酒精含量越高，葡萄酒的密度也就约低，这样也就从侧面印证了上面的推断，酒精含量越高，密度越低，质量评分越高。酒精除了和密度相关性强之外，和残糖以及总二氧化硫的含量也有很强的相关性，它们之间的相关系数都约为-0.45。
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,point_residual.sugar_alcohol}
+ggplot(aes(x=residual.sugar,y=alcohol),data = wq)+
+  geom_point(alpha=0.1)+
+  xlim(c(0,25))+
+  geom_smooth()
+```
+```{r echo=FALSE,warning=FALSE,message=FALSE,point_total.sulfur.dioxide_alcohol}
+ggplot(aes(x=total.sulfur.dioxide,y=alcohol),data = wq)+
+  geom_point(alpha=0.1)+
+  xlim(c(0,250))+
+  geom_smooth()
+```
+
+通过对上面两幅图的分析，酒精同残糖量以及总二氧化硫含量负相关，为什么会造成这种情况，这是由于在葡萄酒的生产过程中，通过发酵将糖转化为酒精，所以残糖含量越高，酒精含量酒越低。而葡萄酒中二氧化硫实际上充当了防腐剂、保鲜剂、抗氧化剂的功效，它和酒精含量的关系是负相关的，总二氧化硫含量越高，酒精含量越低。而总二氧化硫含量不只与酒精强度相关，同密度也有很强的相关系数0.53.
+
+```{r echo=FALSE,warning=FALSE,message=FALSE, point_total.sulfur.dioxide_density}
+ggplot(aes(x=total.sulfur.dioxide,y=density),data = subset(wq,density<1.01& total.sulfur.dioxide<250))+
+  geom_point(alpha=0.1)+
+  geom_smooth()
+```
+
+总二氧化硫含量同葡萄酒的密度，也有较强的相关性，含量越高，葡萄酒的密度也就越高。
+
+```{r echo=FALSE,warning=FALSE,message=FALSE, point_chlorides_quality}
+ggplot(aes(x=quality,y=chlorides,group=quality),data = wq)+
+  geom_point(alpha=0.05)+
+  geom_jitter(alpha=0.3)+
+  geom_boxplot()+
+  ylim(0,quantile(wq$chlorides,0.99))
+```
+
+这里绘制出了质量和氯化物含量的散点图和线箱图，通过调整噪声、透明度、以及相关坐标轴的限制可以发现氯化物和质量评分之间的关系，虽然不如酒精含量和密度那么明显，但是也近乎是负相关的，即氯化物含量越低，酒精质量评分就越高。
+
+```{r echo=FALSE,warning=FALSE, point_box_volatile.acidity_quanlity}
+ggplot(aes(x=quality,y=volatile.acidity,group=quality),data = wq)+
+  geom_boxplot()
+```
+```{r echo=FALSE,warning=FALSE, point_box_total.sulfur.dioxide}
+ggplot(aes(x=quality,y=total.sulfur.dioxide,group=quality),data = wq)+
+  geom_boxplot()
+```
+
+通过观察质量评分和挥发性酸的含量以及总二氧化硫的含量，发现虽然它们和质量评分有相关性，但相关性都不是很强。
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,point_density_residual.sugar}
+ggplot(aes(x=residual.sugar,y=density),data = wq)+
+  geom_point(alpha=0.05)+
+  scale_x_continuous(limits = c(0,25))+
+  scale_y_continuous(limits = c(0.985,1.01))+
+  geom_smooth()
+```
+
+从相关系数矩阵中发现，密度和残糖的含量相关系数高达0.85，所以这里做出它们的散点图进一步观察二者之间的关系，二者几乎呈线性关系，残糖的含量越高，则白葡萄酒的密度越低，相对于其他特性，残糖对葡萄酒密度的影响最大。
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,point_free.sulfur.dioxide_total.sulfur.dioxide}
+ggplot(aes(x=free.sulfur.dioxide,y=total.sulfur.dioxide),data = wq)+
+  geom_point(alpha=0.1)+
+  xlim(c(0,100))+
+  geom_smooth()
+```
+
+游离二氧化硫的含量和总二氧化硫的含量相关性也很强，也几乎呈线性，通过查阅相关资料，发现总二氧化硫含量包括了游离二氧化硫和结合二氧化硫。那这里是否二者的比率会影响质量评分呢？
+
+```{r}
+wq$ratio.free.total <- wq$free.sulfur.dioxide/wq$total.sulfur.dioxide
+cor.test(wq$quality,wq$ratio.free.total)
+```
+
+通过计算比率和相关系数，发现游离二氧化硫占总二氧化硫含量的比率和质量评分的相关系数依然不大，仅为0.197，再次查阅相关资料，发现这个比率会随着时间变化，游离二氧化硫的含量会越来越少。所以它和质量评分的关系不大。
+
+```{r echo=FALSE,point_quality_alcohol.level}
+ggplot(aes(x=alcohol.level,y=quality),data = wq)+
+  geom_point(alpha=0.05)+
+  geom_jitter()
+```
+
+最后这里考虑到之前划分的酒精含量水平（alcohol.level）的特性，来进行观察，考虑到大量的重合点，这里通过添加噪声和设置透明度观察。不同酒精水平的质量评分的分布明显有一些差异。同一酒精水平上的质量评分程阶段分布，这是由于质量评分都是整数造成的，而当酒精水平是low时，大部分的评分在5-6上面，而当酒精含量是中等时，大部分的评分在5-7之间，最后当酒精含量高时，大部分的评分在6-7之间，评分在6以下的很少。这也印证了刚开始的猜想，酒精含量越高，质量评分就越高。
+
+# 双变量分析
+
+### 探讨你在这部分探究中观察到的一些关系。这些感兴趣的特性与数据集内其他特性有什么区别？
+在进行双变量分析时，最主要的关注点还是质量评分和其他特性之间的关系，首先创建了相关系数矩阵，并创建了相关系数的可视化图形，通过观察可以较明显的发现和质量评分相关性最强的两个特性，酒精含量和密度。
+
+- 通过绘制二者的散点图和线箱图，发现随着酒精含量的增加，质量评分也逐渐变高。更细节的观察是当质量评分在3-5时，随着酒精含量的增加，质量评分逐渐降低，而当质量评分在5-9时，随着酒精含量的增加，质量评分也在增加。
+- 通过绘制密度和质量评分的关系，发现随着密度的降低，质量评分逐渐变高。在质量评分较低（3-5）时，质量评分和密度的关系不是很明显，而当质量评分大于5时，随着密度的增加，质量评分也就越来越低了。
+- 考虑到酒精和密度之间的强相关性（相关系数-0.78），分析了一下酒精含量同密度的关系，利用散点图和拟合曲线，发现二者几乎是一种线性关系，随着酒精含量的增加，密度逐渐降低。
+- 再次观察相关系数矩阵，发现酒精含量还和残糖、及总二氧化硫的含量有较强的相关性（相关系数-0.45），所以，分别利用散点图，观察了一下它们之间的关系，从总的趋势上来看，随着残糖含量的升高，酒精含量会降低，总二氧化硫的含量越高，酒精含量也越低。
+- 总二氧化硫的含量和密度的相关系数也比较高，约为0.53，随着总二氧化硫的增高，密度也增高，而密度越高，说明酒精含量越低，这也证明了上述的分析。
+- 此外，发现游离二氧化硫含量和总二氧化硫含量之间的关系也是正相关的，考虑到总二氧化硫和密度及酒精含量都有很强的相关性，所以考虑是否这二者的比率对质量评分有影响。通过计算比率和质量评分的相关系数，约为0.20
+- 最后，还观察了质量评分同酒精含量水平（alcohol.level）之间的关系，通过散点图，可以明显看出处在高酒精含量的葡萄酒评分高。
+
+### 你是否观察到主要特性与其他特性之间的有趣关系？
+除了酒精含量和密度，还观察了质量评分同氯化物、挥发性酸、总二氧化硫的含量的线箱图，通过一些调整，发现随着这些特性的增加，质量评分也呈逐渐降低的趋势，但是不是那么明显。
+
+### 你发现最强的关系是什么？
+最强的关系应该是密度和残糖含量之间的关系了，这二者间的相关系数高达0.84，通过查阅相关资料，我们知道葡萄酒主要是由水、酒精及其他矿物质组成，糖分经过发酵会产生酒精，而残糖含量和发酵时间有很大关系，也就是说发酵时间越长，残糖含量就越少，酒精含量就越多，就会导致葡萄酒的密度降低。此外，通过相关系数矩阵可以看出酒精和密度也有很强的相关性，约为-0.78。
+
+
+# 多变量绘图选择
+
+```{r echo=FALSE,warning=FALSE, Multivariate_Plots}
+ggplot(aes(x=alcohol,y=density,color=factor(quality)),data = wq)+
+  geom_jitter(alpha=0.2)+
+  scale_color_brewer(palette = "Blues")+
+  scale_y_continuous(limits = c(0.985,1.005))+
+  geom_smooth(method = 'lm',se=FALSE,size=1)+
+  theme_dark()
+```
+```{r echo=FALSE,warning=FALSE, point_alcohol_density_quality}
+ggplot(aes(x=alcohol.level,y=density,color=factor(quality)),data = wq)+
+  geom_jitter(alpha=0.6)+
+  scale_color_brewer(palette = "Blues")+
+  scale_y_continuous(limits = c(0.985,1.005))+
+  theme_dark()
+?scale_color_brewer
+```
+```{r echo=FALSE,warning=FALSE,message=FALSE,point_density_quality_alcohol.level}
+ggplot(aes(x=density,y=quality,color=alcohol.level),data = wq)+
+  geom_jitter(alpha=0.6)+
+  scale_color_brewer(palette = "Blues")+
+  scale_x_continuous(limits = c(0.985,1.01))+
+  theme_dark()
+```
+```{r echo=FALSE,warning=FALSE,message=FALSE,point_density_alcohol_factorquality}
+ggplot(aes(x=density,y=alcohol,color=factor(quality)),data = wq)+
+  geom_jitter(alpha=0.5)+
+  scale_color_brewer(palette = "Reds")+
+  scale_x_continuous(limits = c(0.985,1.01))+
+  facet_wrap(~quality)+
+  theme_dark()
+```
+```{r echo=FALSE,ml_alcohol_density}
+m1 <- lm(quality~alcohol,data = wq)
+m2 <- update(m1,~.+density)
+mtable(m1,m2)
+```
+
+这里结合酒精含量，密度及质量评分创建散点图，可以很清晰的发现大部分的白葡萄酒评分在5-7之间，而评分高的，密度越低，酒精含量越高。利用酒精含量水平来观察，这些特性更加明显。这里创建了利用酒精含量和密度来判断质量评分的线性模型，酒精能决定近19%的质量评分。
+
+```{r echo=FALSE,warning=FALSE, message=FALSE,point_total.sulfur.dioxide_alcohol.level}
+ggplot(aes(x=total.sulfur.dioxide,y=residual.sugar,color=alcohol.level),data = wq)+
+  geom_jitter(alpha=0.3)+
+  scale_color_brewer(palette = 'Blues')+
+  scale_x_continuous(limits = c(0,300))+
+  scale_y_continuous(limits = c(0,30))+
+  geom_smooth(method = 'gam',se=FALSE,size=1)+
+  theme_dark()
+```
+```{r echo=FALSE,warning=FALSE,message=FALSE, point_quality_to_total.sulfur.dioxide_by_alcohol.level}
+q1 <- ggplot(aes(x=total.sulfur.dioxide,y=quality,color=alcohol.level),data = wq)+
+  geom_jitter(alpha=0.2)+
+  scale_color_brewer(palette = 'Blues')+
+  scale_x_continuous(limits = c(0,300))+
+  theme_dark()
+q2 <- ggplot(aes(x=residual.sugar,y=quality,color=alcohol.level),data = wq)+
+  geom_jitter(alpha=0.2)+
+  scale_color_brewer(palette = 'Blues')+
+  scale_x_continuous(limits = c(0,25))+
+  theme_dark()
+grid.arrange(q1,q2,ncol=1)
+```
+
+通过观察发现，残糖和二氧化硫的含量越高，酒精含量越低，但是残糖及二氧化硫单独同质量评分的关系并不明显。
+
+```{r echo=FALSE,warning=FALSE,point_residual_density_quality}
+ggplot(aes(x=residual.sugar,y=density,color=factor(quality)),data = wq)+
+  geom_jitter(alpha=0.2)+
+  scale_color_brewer(palette = 'Oranges')+
+  scale_x_continuous(limits = c(0,25))+
+  scale_y_continuous(limits = c(0.985,1.01))+
+  geom_smooth(method = 'lm',size=1)+
+  theme_dark()
+```
+
+通过这幅图，发现密度和残糖之间几乎呈线性关系，质量越高，残糖含量越少，密度越小。
+
+```{r echo=FALSE,warning=FALSE,lm_total.sulfur.dioxide_residual.sugar}
+m3 <-update(m2,~.+total.sulfur.dioxide)
+m4 <-update(m3,~.+residual.sugar)
+mtable(m1,m2,m3,m4)
+```
+
+通过观察发现结合了总二氧化硫含量以及残糖含量，这四种因素对质量评分能够解释近21%的质量评分。
+
+```{r echo=FALSE,warning=FALSE,point_fixed.acidity_volatile.acidity}
+ggplot(aes(x=volatile.acidity,y=pH,color=factor(quality)),data = wq)+
+  geom_jitter(alpha=0.3)+
+  scale_color_brewer(palette ='Blues')+
+  facet_wrap(~quality)+
+  theme_dark()
+```
+```{r echo=FALSE,warning=FALSE,lm_volatile.acidity_pH}
+m5 <- update(m4,~.+volatile.acidity)
+m6 <- update(m5,~.+pH)
+mtable(m5,m6)
+```
+
+进一步结合挥发性酸和pH值，来构建线性模型，这样构造的模型能够解释近27.2%的质量评分。
+
+```{r echo=FALSE,warning=FALSE,point_chlorides_sulphates}
+ggplot(aes(x=chlorides,y=sulphates,color=factor(quality)),data = wq)+
+  geom_jitter(alpha=0.3)+
+  scale_color_brewer(palette = 'Blues')+
+  facet_wrap(~quality)+
+  theme_dark()
+```
+```{r echo=FALSE,warning=FALSE,lm_chlorides_sulphates}
+m7 <- update(m6,~.+chlorides)
+m8 <- update(m7,~.+sulphates)
+mtable(m7,m8)
+```
+
+结合之前的线性模型，再加上氯化物和硫酸盐这两种特性，R^2^值也仅提升了0.05%，整个线性模型仅能解释27.7%的质量评分，模型构建的不成功。
+
+
+# 多变量分析
+
+###  探讨你在这部分探究中观察到的一些关系。通过观察感兴趣的特性，是否存在相互促进的特性？
+- 首先，分析了质量评分、密度与酒精含量之间的关系，酒精含量同密度之间近乎是线性关系，酒精含量越高，密度越小，质量评分越高，这里利用酒精含量水平来观察，更加明显。通过构建线性模型，发现酒精含量能解释白葡萄酒质量评分的19%，而加上密度后，R^2^值仅提高了0.2%。
+- 还观察了残糖含量，总二氧化硫含量对酒精含量水平的影响，这二者的变化和酒精含量负相关，所以进一步观察了它们对质量评分的影响，也是负相关，但是不够明显。在之前创建的线性模型中又添加了残糖含量和总二氧化硫含量。R^2^值提高到了21%。
+- 相对于ph值对质量评分的影响，挥发性酸的含量和质量评分的关系要更明显一些，二者负相关。同样，我将这两种特性加入到了线性模型中，加入挥发性酸后，R^2^值提高了5.5%，非常明显，再加上pH值，R^2^值提高到了27.2%。
+- 最后还观察了氯化物、硫酸盐同质量评分的关系，在之前的线性模型中又加入了这两种特性，但是最终得到的线性模型的R^2^值为27.7%，提高的并不多。
+
+### 这些特性之间是否存在有趣或惊人的联系呢？
+残糖含量同密度正相关，几乎是线性关系，再结合密度同酒精的线性关系，所以这三者之间的相关性非常强，对质量评分的影响非常大。
+
+### 选项：你是否创建过数据集的任何模型？讨论你模型的优缺点。
+通过结合酒精含量，密度，总二氧化硫含量，残糖，挥发性酸，ph值，氯化物含量，硫酸盐含量构建了一个预测白葡萄酒的线性模型，其中酒精含量能解释19%的质量评分，但是该线性模型的R^2^值，仅为27.2%。不能做出较好的预测。
+
+------
+
+# 定稿图与总结
+
+### 绘图一
+```{r echo=FALSE, Plot_One}
+ggplot(aes(x=quality,y=alcohol,group=quality),data = wq)+
+  geom_boxplot(alpha=0.3,color='blue')+
+  geom_jitter(alpha=0.1)+
+  stat_summary(fun.y = mean,geom='point',color='red')+
+  geom_smooth(method = lm,color='red',aes(group=1))+
+  labs(x="Quality",y="Alcohol(% by volume)",title = "Quality VS Alcohol")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+### 描述一
+从上图可以看出，大部分的白葡萄酒的评分在5-7之间，当质量评分在3-5时，随着质量评分的提高，白葡萄酒酒精含量的中位数在降低，而当质量评分大于5后，随着质量评分的升高，酒精含量的中位数也在升高，图中的红线简单地表示了质量和酒精含量的线性关系，二者正相关。图中的红点表示各质量评分下的酒精含量均值。
+
+### 绘图二
+```{r echo=FALSE,warning=FALSE, Plot_Two}
+ggplot(aes(x=density,y=quality,color=alcohol.level),data = wq)+
+  geom_jitter(alpha=0.2)+
+  scale_color_brewer(palette = "Blues",
+                     labels=c('low(<=10%)','median(10%~12%)','high(>12%)'))+
+  scale_x_continuous(limits = c(0.985,1.01))+
+  labs(x="Density(g/dm^3)",y="Quality",
+       title = "Different alcohol.level Density VS Quality")+
+  theme_dark()+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+### 描述二
+这幅图中对酒精含量进行了划分，酒精含量由低到高，小圆点颜色由浅到深。这幅图反映了与质量评分同密度和酒精含量水平之间的关系。明显低度白葡萄酒的密度更高质量评分偏低，高度白葡萄酒的密度更低质量评分更高。
+
+### 绘图三
+```{r echo=FALSE,warning=FALSE,message=FALSE,Plot_Three}
+ggplot(aes(x=residual.sugar,y=density,color=factor(quality)),data = wq)+
+  geom_jitter(alpha=0.5)+
+  geom_smooth(method='lm',color="red")+
+  scale_color_brewer(palette = "Blues",
+                     name="quality")+
+  scale_x_continuous(limits = c(0,30))+
+  scale_y_continuous(limits = c(0.985,1.01))+
+  facet_wrap(~quality)+
+  labs(x="residual.sugar(g/dm^3)",y="Density(g/cm^3)",
+       title = "Different Quality Residual.sugar VS Density")+
+  theme_dark()+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+### 描述三
+这幅图对不同质量评分的白葡萄酒进行了划分，评分越高的葡萄酒，颜色越深。质量越高的葡萄酒，残糖含量越低，密度也越低。能够很清楚的看出，不同质量评分的葡萄酒，其残糖含量和密度均呈现线性关系。
+
+------
+
+# 反思
+白葡萄酒数据集包含了4898个白葡萄酒的化学成分含量及评分等信息，该数据集是在2009年收集的。该数据集被广泛应用于数据挖掘领域，来进行建模预测学习分析。本次探索分析，我从单变量分析开始，来理解数据集，找出最感兴趣的特性质量评分，再通过相关矩阵，分析其他变量分别对质量评分的影响，最终，再分析了多个变量对质量评分的影响，尝试构造了一个线性模型，来预测白葡萄酒的质量评分。但最终模型的R^2^值仅为27.2%。效果不好。一方面这可能是由于质量评分是整数值，并不是一个连续的数值，所以线性模型不够理想；另一方面，可能对于变量间的关系分析的还不够透彻。  
+通过相关矩阵，发现酒精含量、密度和质量评分的相关系数最大，所以对这两个变量进行了探索，其次，发现残糖含量及总二氧化硫含量和密度及酒精的相关系数也很大，深入的分析了这几个变量间的关系，发现酒精含量和密度之间存在较强的线性关系，二者负相关，其次残糖含量也同酒精有较强的线性关系，二者也是负相关。最后还探索了质量评分同几种酸的含量之间的关系以及矿物盐的关系，虽然这些同质量评分的相关性不强，但它们对质量评分也有影响。
+通过探索数据集，如果要提高白葡萄酒的质量评分，最直接有效的方法可能就是提高酒精含量，葡萄酒中的酒精是由糖发酵而来的，发酵越充分，酒精含量就越高，密度就越低，可能最终的葡萄酒会有更高的质量评分；此外，葡萄酒中的总二氧化硫含量充当了防腐剂，保鲜剂的功效，影响葡萄酒的质量；而各种酸会影响口感和气味，也对质量有较大的影响。  
+本次探索的数据集有一定限制，首先，葡萄酒中的化学物质含量包括的有限，可能还有其他未统计的影响质量评分的化学物质；其次，该数据集仅包含了白葡萄酒的信息，没有其他如红葡萄酒的信息，数据集的覆盖面应该更广一些，这样可能会构建一个更有实际意义的预测模型。
+未来继续的分析，首先要解决的应该是模型选取的问题，通过相关资料了解到SVM对于葡萄酒质量评分的预测效果最好，可能在后续会用SVM来作为预测模型；此外还可以加入红葡萄酒的数据集，来进行这两种葡萄酒之间的化学成分含量之间的差异分析；利用更完善的数据集以及评分，来构建更有代表性的模型，指导葡萄酒厂家，制造更多高品质的葡萄酒。
