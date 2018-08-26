@@ -1,4 +1,4 @@
-# DANA_ADVANCE
+# DataAnalysis_ADVANCE
 1、P1检验心理学现象  
 2、用Python清洗 WeRateDogs 推特数据  
 3、用R语言进行葡萄酒数据的EDA  
